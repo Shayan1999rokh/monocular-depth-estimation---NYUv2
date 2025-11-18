@@ -1,0 +1,10 @@
+Link to the code and data:
+
+Code: https://www.kaggle.com/code/shreydan/monocular-depth-estimation-nyuv2/notebook
+
+Data: https://www.kaggle.com/code/shreydan/monocular-depth-estimation-nyuv2/input
+# The data is 4GB and cannot easily be downloaded with Iran interent speed!
+
+
+
+## This project is from Kaggle
