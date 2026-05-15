@@ -1,62 +1,82 @@
-# Depth Estimation with U-Net++ on NYU Depth V2
+# Depth Estimation using U-Net++ on NYU Depth V2
 
-A clean and efficient deep learning pipeline for **monocular depth estimation** using **U-Net++** with a **ResNeXt50_32x4d encoder** on the **NYU Depth V2** dataset.
-This project uses **PyTorch**, **segmentation_models_pytorch**, **Albumentations**, and **mixed precision training** to achieve high-quality depth prediction.
+## Overview
 
----
+This project implements a **monocular depth estimation** pipeline using a deep learning approach based on **U-Net++** with a **ResNeXt50_32x4d encoder**. The model is trained on the **NYU Depth V2** dataset to predict dense depth maps from single RGB indoor images.
 
-# Overview
+The project uses:
 
-This project predicts dense depth maps from single RGB indoor images using a U-Net++ architecture.
+* **PyTorch**
+* **Segmentation Models PyTorch (SMP)**
+* **Albumentations**
+* **Mixed Precision Training**
+* **SSIM + MSE Evaluation**
+* **Transfer Learning with ResNeXt50**
 
-The model was trained on the NYU Depth V2 dataset and achieved:
-
-| Metric | Validation Score |
-| ------ | ---------------- |
-| SSIM   | **0.909**        |
-| MSE    | **0.0028**       |
-
-The implementation includes:
-
-* U-Net++ architecture
-* Transfer learning with pretrained ResNeXt50 encoder
-* Mixed precision training (AMP)
-* Extensive data augmentation
-* SSIM + MSE evaluation
-* Visualization utilities
-* Training/validation/test pipeline
+The model achieves strong qualitative and quantitative performance using a lightweight and clean training pipeline.
 
 ---
 
-# Model Architecture
+# Table of Contents
 
-The network is based on:
-
-* **Architecture:** U-Net++
-* **Encoder Backbone:** ResNeXt50_32x4d
-* **Input:** RGB image
-* **Output:** Single-channel depth map
-
-Implemented using:
-
-```python
-segmentation_models_pytorch.UnetPlusPlus
-```
+1. Project Goal
+2. Dataset
+3. Model Architecture
+4. Training Strategy
+5. Data Augmentation
+6. Metrics
+7. Loss Function
+8. Mixed Precision Training
+9. Project Structure
+10. Installation
+11. Usage
+12. Training Pipeline
+13. Inference Pipeline
+14. Results
+15. Visualization
+16. Key Features
+17. Future Improvements
+18. License
+19. Acknowledgment
 
 ---
 
-# Dataset
+# 1. Project Goal
 
-Dataset used:
+The purpose of this project is to estimate scene depth from a single RGB image.
 
-* NYU Depth V2
+Depth estimation is an important computer vision task used in:
 
-The dataset contains paired:
+* Autonomous driving
+* Robotics
+* AR/VR
+* 3D reconstruction
+* Scene understanding
+* SLAM systems
 
-* Indoor RGB images
-* Ground-truth depth maps
+Unlike stereo vision systems, this project performs **monocular depth estimation**, meaning the model predicts depth using only one RGB image.
 
-Dataset split:
+---
+
+# 2. Dataset
+
+## NYU Depth V2
+
+The project uses the **NYU Depth V2** dataset, one of the most popular benchmarks for indoor depth estimation.
+
+Dataset contains:
+
+* RGB indoor images
+* Corresponding depth maps
+* Various indoor scenes:
+
+  * Bedrooms
+  * Kitchens
+  * Offices
+  * Living rooms
+  * Bathrooms
+
+### Dataset Split
 
 | Split      | Samples |
 | ---------- | ------- |
@@ -64,210 +84,519 @@ Dataset split:
 | Validation | 4,562   |
 | Test       | 507     |
 
+### Data Format
+
+Each sample includes:
+
+* RGB image
+* Corresponding grayscale depth map
+
+Depth maps are normalized to:
+
+```python
+depth = depth / 255.
+```
+
 ---
 
-# Features
+# 3. Model Architecture
 
-## Training Features
+## U-Net++
 
-* Mixed precision training using `torch.cuda.amp`
-* Gradient clipping
-* OneCycleLR scheduler
-* AdamW optimizer
-* Encoder freezing/unfreezing strategy
-* GPU memory optimization
+The core model is based on **U-Net++**, an advanced variation of U-Net with redesigned skip pathways and dense skip connections.
 
-## Augmentations
+### Why U-Net++?
 
-Implemented using Albumentations:
+Compared to standard U-Net:
+
+* Better feature fusion
+* Reduced semantic gap between encoder and decoder
+* Improved multi-scale learning
+* Better segmentation/regression performance
+
+---
+
+## Encoder
+
+The encoder backbone is:
+
+```python
+resnext50_32x4d
+```
+
+### Benefits of ResNeXt50
+
+* Strong feature extraction
+* Efficient grouped convolutions
+* Better representation learning
+* Pretrained on ImageNet
+
+---
+
+## Final Model
+
+```python
+smp.UnetPlusPlus(
+    encoder_name='resnext50_32x4d',
+    in_channels=3,
+    classes=1
+)
+```
+
+### Input
+
+* RGB image
+* Shape: `(3, 224, 224)`
+
+### Output
+
+* Single-channel depth map
+* Shape: `(1, 224, 224)`
+
+---
+
+# 4. Training Strategy
+
+The project uses a **two-stage training strategy**.
+
+## Stage 1 — Frozen Encoder
+
+Initially, the encoder is frozen:
+
+```python
+model.trainable_encoder(trainable=False)
+```
+
+Only the decoder is trained.
+
+### Why?
+
+This helps:
+
+* Stabilize training
+* Preserve pretrained ImageNet features
+* Allow decoder adaptation first
+
+---
+
+## Stage 2 — Full Fine-Tuning
+
+After several epochs:
+
+```python
+model.trainable_encoder(trainable=True)
+```
+
+Both encoder and decoder are trained together.
+
+This improves:
+
+* Feature adaptation
+* Domain learning
+* Final accuracy
+
+---
+
+# 5. Data Augmentation
+
+Extensive augmentations are applied using Albumentations.
+
+## Applied Augmentations
+
+### Geometric Transformations
 
 * Horizontal Flip
+* ShiftScaleRotate
+* RandomResizedCrop
+
+### Noise & Blur
+
 * Gaussian Noise
 * Motion Blur
 * Median Blur
+* Standard Blur
+
+### Color Transformations
+
 * RGB Shift
-* Random Brightness & Contrast
-* RandomResizedCrop
-* ColorJitter
-* ShiftScaleRotate
-* HueSaturationValue
+* Brightness/Contrast
+* Color Jitter
+* Hue/Saturation Adjustments
 
 ---
 
-# Evaluation Metrics
+## Final Preprocessing
 
-The project uses:
+```python
+A.Resize(224, 224)
+A.Normalize()
+ToTensorV2()
+```
 
-## Structural Similarity Index (SSIM)
+---
 
-SSIM measures perceptual similarity between predicted and ground-truth depth maps.
+# 6. Metrics
+
+The project evaluates model performance using:
+
+---
+
+## SSIM (Structural Similarity Index)
+
+SSIM measures structural similarity between predicted and ground truth depth maps.
 
 Higher is better.
 
-## Mean Squared Error (MSE)
+### Advantages
 
-Measures pixel-wise reconstruction error.
+* Perceptual quality aware
+* Considers:
+
+  * Luminance
+  * Contrast
+  * Structure
+
+### Formula
+
+SSIM(x,y)=\frac{(2\mu_x\mu_y+c_1)(2\sigma_{xy}+c_2)}{(\mu_x^2+\mu_y^2+c_1)(\sigma_x^2+\sigma_y^2+c_2)}
+
+---
+
+## MSE (Mean Squared Error)
+
+Measures pixel-wise regression error.
 
 Lower is better.
 
----
+### Formula
 
-# Training Configuration
-
-| Parameter     | Value      |
-| ------------- | ---------- |
-| Epochs        | 5          |
-| Freeze Epochs | 2          |
-| Batch Size    | 64         |
-| Learning Rate | 1e-3       |
-| Optimizer     | AdamW      |
-| Scheduler     | OneCycleLR |
-| Loss Function | MSELoss    |
-| Image Size    | 224×224    |
+MSE=\frac{1}{N}\sum_{i=1}^{N}(y_i-\hat{y}_i)^2
 
 ---
 
-# Results
+# 7. Loss Function
 
-## Training Logs
+The project uses:
 
-| Epoch | Train Loss | Val Loss | Train SSIM | Val SSIM | Train MSE | Val MSE |
-| ----- | ---------- | -------- | ---------- | -------- | --------- | ------- |
-| 0     | 0.0953     | 0.0097   | 0.5750     | 0.7697   | 0.0954    | 0.0097  |
-| 1     | 0.0102     | 0.0057   | 0.8415     | 0.8671   | 0.0102    | 0.0058  |
-| 2     | 0.0104     | 0.0045   | 0.8724     | 0.8889   | 0.0104    | 0.0046  |
-| 3     | 0.0068     | 0.0032   | 0.8979     | 0.9038   | 0.0068    | 0.0032  |
-| 4     | 0.0050     | 0.0028   | 0.9101     | 0.9091   | 0.0050    | 0.0028  |
+```python
+nn.MSELoss()
+```
 
----
+Why MSE?
 
-# Visualization
-
-The project includes utilities for:
-
-* RGB image visualization
-* Ground-truth depth map visualization
-* Predicted depth map visualization
-* Colored depth rendering using Inferno colormap
-
-Brighter colors indicate greater depth.
+* Stable regression optimization
+* Common for dense prediction tasks
+* Easy to optimize
 
 ---
 
-# Installation
+# 8. Mixed Precision Training
 
-Clone the repository:
+The project uses PyTorch AMP:
+
+```python
+from torch.cuda.amp import autocast, GradScaler
+```
+
+## Benefits
+
+* Faster training
+* Reduced GPU memory usage
+* Larger effective batch sizes
+* Improved throughput
+
+---
+
+# 9. Project Structure
+
+```text
+project/
+│
+├── train.py
+├── README.md
+├── requirements.txt
+│
+├── models/
+│   └── nyu-v2-depth-resnext50_32x4d-unetplusplus.pt
+│
+├── outputs/
+│   ├── predictions/
+│   ├── logs/
+│   └── visualizations/
+│
+└── dataset/
+    └── nyu_depth_v2/
+```
+
+---
+
+# 10. Installation
+
+## Clone Repository
 
 ```bash
-git clone https://github.com/your-username/depth-estimation-unetplusplus.git
+git clone https://github.com/yourusername/depth-estimation-unetplusplus.git
+
 cd depth-estimation-unetplusplus
 ```
 
-Install dependencies:
+---
+
+## Install Dependencies
 
 ```bash
 pip install -U segmentation-models-pytorch
-pip install albumentations
-pip install torchmetrics
 ```
 
----
-
-# Required Libraries
-
-```python
-torch
-torchvision
-segmentation-models-pytorch
-albumentations
-opencv-python
-numpy
-pandas
-matplotlib
-scikit-learn
-torchmetrics
-Pillow
-tqdm
-```
-
----
-
-# Training
-
-Run the training notebook or script:
+Additional dependencies:
 
 ```bash
+pip install torch torchvision albumentations matplotlib pandas tqdm opencv-python pillow torchmetrics scikit-learn
+```
+
+---
+
+# 11. Usage
+
+## Train Model
+
+```python
 python train.py
 ```
 
-or open the Kaggle notebook directly.
-
 ---
 
-# Inference
-
-Load trained weights:
+## Load Best Model
 
 ```python
-model.load_state_dict(torch.load('nyu-v2-depth-resnext50_32x4d-unetplusplus.pt'))
+best_sd = torch.load('nyu-v2-depth-resnext50_32x4d-unetplusplus.pt')
+model.load_state_dict(best_sd)
 ```
 
-Run prediction:
+---
+
+## Run Inference
 
 ```python
-preds = model(images)
+preds = model(img)
 ```
 
 ---
 
-# Sample Pipeline
+# 12. Training Pipeline
 
-1. Load RGB image
-2. Apply preprocessing & augmentations
-3. Feed image into U-Net++
-4. Predict depth map
-5. Evaluate using SSIM and MSE
-6. Visualize prediction
+## Training Steps
+
+1. Load dataset
+2. Apply augmentations
+3. Create DataLoaders
+4. Initialize model
+5. Freeze encoder
+6. Train decoder
+7. Unfreeze encoder
+8. Fine-tune full model
+9. Save best checkpoint
+10. Evaluate on test set
 
 ---
 
-# Project Structure
+## Optimizer
 
-```text
-├── train.py
-├── inference.py
-├── README.md
-├── requirements.txt
-├── models/
-├── outputs/
-├── notebooks/
-└── weights/
+```python
+AdamW
+```
+
+### Configuration
+
+```python
+lr = 1e-3
+weight_decay = 0.02
 ```
 
 ---
 
-# Future Improvements
+## Scheduler
 
-Possible future extensions:
+```python
+OneCycleLR
+```
 
-* Train with higher input resolution
-* Use transformer-based encoders
-* Add attention mechanisms
-* Experiment with depth-specific loss functions
-* Multi-scale supervision
-* Real-time inference optimization
+Advantages:
 
----
-
-# Acknowledgements
-
-* NYU Depth V2 Dataset
-* PyTorch
-* segmentation_models_pytorch
-* Albumentations
+* Faster convergence
+* Better generalization
+* Dynamic learning rate scheduling
 
 ---
 
-# License
+## Gradient Clipping
+
+```python
+nn.utils.clip_grad_norm_(...)
+```
+
+Used to stabilize training.
+
+---
+
+# 13. Inference Pipeline
+
+During inference:
+
+* Gradients are disabled
+* Mixed precision is enabled
+* Predictions are collected
+* Metrics are computed
+* Results are visualized
+
+---
+
+# 14. Results
+
+## Final Metrics
+
+| Metric          | Value  |
+| --------------- | ------ |
+| Validation SSIM | 0.909  |
+| Validation MSE  | 0.0028 |
+
+---
+
+## Training Progress
+
+| Epoch | Train Loss | Val Loss | Train SSIM | Val SSIM |
+| ----- | ---------- | -------- | ---------- | -------- |
+| 0     | 0.0953     | 0.0097   | 0.5750     | 0.7697   |
+| 1     | 0.0102     | 0.0057   | 0.8415     | 0.8671   |
+| 2     | 0.0104     | 0.0045   | 0.8724     | 0.8889   |
+| 3     | 0.0068     | 0.0032   | 0.8979     | 0.9038   |
+| 4     | 0.0050     | 0.0028   | 0.9101     | 0.9091   |
+
+---
+
+# 15. Visualization
+
+The project visualizes:
+
+* Original RGB image
+* Ground truth depth map
+* Predicted depth map
+
+Depth maps use the:
+
+```python
+inferno
+```
+
+colormap where:
+
+* Brighter colors indicate larger depth
+* Darker colors indicate closer objects
+
+---
+
+# 16. Key Features
+
+## Highlights
+
+* U-Net++ architecture
+* ResNeXt50 pretrained encoder
+* Mixed precision training
+* Extensive augmentations
+* SSIM evaluation
+* OneCycle learning rate scheduling
+* Gradient clipping
+* Encoder freezing/unfreezing
+* Clean modular implementation
+
+---
+
+# 17. Future Improvements
+
+Potential future enhancements:
+
+## Architecture Improvements
+
+* Attention U-Net++
+* DeepLabV3+
+* Swin Transformer backbone
+* ConvNeXt encoder
+
+---
+
+## Loss Functions
+
+Try combinations such as:
+
+```python
+L1 + SSIM
+```
+
+or:
+
+```python
+BerHu Loss
+```
+
+---
+
+## Metrics
+
+Additional metrics:
+
+* RMSE
+* MAE
+* δ Accuracy thresholds
+
+---
+
+## Data Improvements
+
+* Higher resolution training
+* Better depth normalization
+* Test-time augmentation
+
+---
+
+## Training Improvements
+
+* Longer training
+* Cosine annealing
+* EMA weights
+* Self-supervised pretraining
+
+---
+
+# 18. License
 
 This project is open-source and available under the MIT License.
+
+---
+
+# 19. Acknowledgment
+
+Libraries and frameworks used:
+
+* PyTorch
+* Segmentation Models PyTorch
+* Albumentations
+* TorchMetrics
+* OpenCV
+* NumPy
+* Matplotlib
+
+Dataset:
+
+* NYU Depth V2
+
+---
+
+# Author
+
+**Shayan Rokhva**
+
+Email: `shayanrokhva1999@gmail.com`
+
+---
+
+Readme is produced by GPT, Check the important info
